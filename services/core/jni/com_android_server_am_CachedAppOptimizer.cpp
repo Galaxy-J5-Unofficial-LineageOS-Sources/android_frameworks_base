@@ -520,11 +520,6 @@ static jint com_android_server_am_CachedAppOptimizer_getBinderFreezeInfo(JNIEnv 
     return retVal;
 }
 
-static jstring com_android_server_am_CachedAppOptimizer_getFreezerCheckPath(JNIEnv* env,
-                                                                            jobject clazz) {
-    return env->NewStringUTF(CGROUP_FREEZE_PATH);
-}
-
 static const JNINativeMethod sMethods[] = {
         /* name, signature, funcPtr */
         {"cancelCompaction", "()V",
@@ -537,9 +532,7 @@ static const JNINativeMethod sMethods[] = {
          (void*)com_android_server_am_CachedAppOptimizer_enableFreezerInternal},
         {"freezeBinder", "(IZ)I", (void*)com_android_server_am_CachedAppOptimizer_freezeBinder},
         {"getBinderFreezeInfo", "(I)I",
-         (void*)com_android_server_am_CachedAppOptimizer_getBinderFreezeInfo},
-        {"getFreezerCheckPath", "()Ljava/lang/String;",
-         (void*)com_android_server_am_CachedAppOptimizer_getFreezerCheckPath}};
+         (void*)com_android_server_am_CachedAppOptimizer_getBinderFreezeInfo}};
 
 int register_android_server_am_CachedAppOptimizer(JNIEnv* env)
 {

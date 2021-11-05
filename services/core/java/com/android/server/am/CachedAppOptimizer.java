@@ -769,12 +769,6 @@ public final class CachedAppOptimizer {
     private static native int getBinderFreezeInfo(int pid);
 
     /**
-     * Returns the path to be checked to verify whether the freezer is supported by this system.
-     * @return absolute path to the file
-     */
-    private static native String getFreezerCheckPath();
-
-    /**
      * Determines whether the freezer is supported by this system
      */
     public static boolean isFreezerSupported() {
@@ -782,7 +776,7 @@ public final class CachedAppOptimizer {
         FileReader fr = null;
 
         try {
-            fr = new FileReader(getFreezerCheckPath());
+            fr = new FileReader("/sys/fs/cgroup/uid_0/cgroup.freeze");
             char state = (char) fr.read();
 
             if (state == '1' || state == '0') {
