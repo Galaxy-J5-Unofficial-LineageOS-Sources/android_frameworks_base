@@ -667,6 +667,12 @@ public class CameraDeviceUserShim implements ICameraDeviceUser {
             throw new ServiceSpecificException(ICameraService.ERROR_DISCONNECTED, err);
         }
 
+        if (templateId == 5)
+        {
+            String err = "createDefaultRequest - invalid templateId 5 specified, forcing to 3";
+            Log.w(TAG, err);
+            templateId = 3;
+        }
         CameraMetadataNative template;
         try {
             template =
