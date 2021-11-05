@@ -507,13 +507,7 @@ static jint com_android_server_am_CachedAppOptimizer_getBinderFreezeInfo(JNIEnv 
 
 static jstring com_android_server_am_CachedAppOptimizer_getFreezerCheckPath(JNIEnv* env,
                                                                             jobject clazz) {
-    std::string path;
-
-    if (!getAttributePathForTask("FreezerState", getpid(), &path)) {
-        path = "";
-    }
-
-    return env->NewStringUTF(path.c_str());
+    return env->NewStringUTF(CGROUP_FREEZE_PATH);
 }
 
 static const JNINativeMethod sMethods[] = {
