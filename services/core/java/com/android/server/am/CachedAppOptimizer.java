@@ -776,17 +776,13 @@ public final class CachedAppOptimizer {
         FileReader fr = null;
 
         try {
-            fr = new FileReader("/sys/fs/cgroup/uid_0/cgroup.freeze");
-            char state = (char) fr.read();
+            fr = new FileReader("/dev/freezer/frozen/freezer.killable");
+            int i = fr.read();
 
-            if (state == '1' || state == '0') {
+            if ((char) i == '1') {
                 // Also check freezer binder ioctl
                 getBinderFreezeInfo(Process.myPid());
                 supported = true;
-                // This is a workaround after reverting the cgroup v2 uid/pid hierarchy due to
-                // http://b/179006802.
-                // TODO: remove once the uid/pid hierarchy is restored
-                enableFreezerInternal(true);
             } else {
                 Slog.e(TAG_AM, "unexpected value in cgroup.freeze");
             }
