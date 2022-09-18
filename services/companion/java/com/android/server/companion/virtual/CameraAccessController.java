@@ -16,14 +16,12 @@
 
 package com.android.server.companion.virtual;
 
-import static android.hardware.camera2.CameraInjectionSession.InjectionStatusCallback.ERROR_INJECTION_UNSUPPORTED;
 
 import android.annotation.NonNull;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.hardware.camera2.CameraAccessException;
-import android.hardware.camera2.CameraInjectionSession;
 import android.hardware.camera2.CameraManager;
 import android.util.ArrayMap;
 import android.util.Slog;
@@ -49,20 +47,12 @@ class CameraAccessController extends CameraManager.AvailabilityCallback implemen
     @GuardedBy("mLock")
     private int mObserverCount = 0;
 
-    @GuardedBy("mLock")
-    private ArrayMap<String, InjectionSessionData> mPackageToSessionData = new ArrayMap<>();
-
     /**
      * Mapping from camera ID to open camera app associations. Key is the camera id, value is the
      * information of the app's uid and package name.
      */
     @GuardedBy("mLock")
     private ArrayMap<String, OpenCameraInfo> mAppsToBlockOnVirtualDevice = new ArrayMap<>();
-
-    static class InjectionSessionData {
-        public int appUid;
-        public ArrayMap<String, CameraInjectionSession> cameraIdToSession = new ArrayMap<>();
-    }
 
     static class OpenCameraInfo {
         public String packageName;
@@ -128,12 +118,6 @@ class CameraAccessController extends CameraManager.AvailabilityCallback implemen
                 int packageUid = openCameraInfo.packageUid;
                 if (runningUids.contains(packageUid)) {
                     final String packageName = openCameraInfo.packageName;
-                    InjectionSessionData data = mPackageToSessionData.get(packageName);
-                    if (data == null) {
-                        data = new InjectionSessionData();
-                        data.appUid = packageUid;
-                        mPackageToSessionData.put(packageName, data);
-                    }
                     startBlocking(packageName, cameraId);
                 }
             }
@@ -154,124 +138,16 @@ class CameraAccessController extends CameraManager.AvailabilityCallback implemen
 
     @Override
     public void onCameraOpened(@NonNull String cameraId, @NonNull String packageName) {
-        synchronized (mLock) {
-            try {
-                final ApplicationInfo ainfo = mPackageManager.getApplicationInfo(packageName, 0);
-                InjectionSessionData data = mPackageToSessionData.get(packageName);
-                if (!mVirtualDeviceManagerInternal.isAppRunningOnAnyVirtualDevice(ainfo.uid)) {
-                    OpenCameraInfo openCameraInfo = new OpenCameraInfo();
-                    openCameraInfo.packageName = packageName;
-                    openCameraInfo.packageUid = ainfo.uid;
-                    mAppsToBlockOnVirtualDevice.put(cameraId, openCameraInfo);
-                    CameraInjectionSession existingSession =
-                            (data != null) ? data.cameraIdToSession.get(cameraId) : null;
-                    if (existingSession != null) {
-                        existingSession.close();
-                        data.cameraIdToSession.remove(cameraId);
-                        if (data.cameraIdToSession.isEmpty()) {
-                            mPackageToSessionData.remove(packageName);
-                        }
-                    }
-                    return;
-                }
-                if (data == null) {
-                    data = new InjectionSessionData();
-                    data.appUid = ainfo.uid;
-                    mPackageToSessionData.put(packageName, data);
-                }
-                if (data.cameraIdToSession.containsKey(cameraId)) {
-                    return;
-                }
-                startBlocking(packageName, cameraId);
-            } catch (PackageManager.NameNotFoundException e) {
-                Slog.e(TAG, "onCameraOpened - unknown package " + packageName, e);
-                return;
-            }
-        }
     }
 
     @Override
     public void onCameraClosed(@NonNull String cameraId) {
-        synchronized (mLock) {
-            mAppsToBlockOnVirtualDevice.remove(cameraId);
-            for (int i = mPackageToSessionData.size() - 1; i >= 0; i--) {
-                InjectionSessionData data = mPackageToSessionData.valueAt(i);
-                CameraInjectionSession session = data.cameraIdToSession.get(cameraId);
-                if (session != null) {
-                    session.close();
-                    data.cameraIdToSession.remove(cameraId);
-                    if (data.cameraIdToSession.isEmpty()) {
-                        mPackageToSessionData.removeAt(i);
-                    }
-                }
-            }
-        }
     }
 
     /**
      * Turns on blocking for a particular camera and package.
      */
     private void startBlocking(String packageName, String cameraId) {
-        try {
-            Slog.d(
-                    TAG,
-                    "startBlocking() cameraId: " + cameraId + " packageName: " + packageName);
-            mCameraManager.injectCamera(packageName, cameraId, /* externalCamId */ "",
-                    mContext.getMainExecutor(),
-                    new CameraInjectionSession.InjectionStatusCallback() {
-                        @Override
-                        public void onInjectionSucceeded(
-                                @NonNull CameraInjectionSession session) {
-                            CameraAccessController.this.onInjectionSucceeded(cameraId, packageName,
-                                    session);
-                        }
 
-                        @Override
-                        public void onInjectionError(@NonNull int errorCode) {
-                            CameraAccessController.this.onInjectionError(cameraId, packageName,
-                                    errorCode);
-                        }
-                    });
-        } catch (CameraAccessException e) {
-            Slog.e(TAG,
-                    "Failed to injectCamera for cameraId:" + cameraId + " package:" + packageName,
-                    e);
-        }
-    }
-
-    private void onInjectionSucceeded(String cameraId, String packageName,
-            @NonNull CameraInjectionSession session) {
-        synchronized (mLock) {
-            InjectionSessionData data = mPackageToSessionData.get(packageName);
-            if (data == null) {
-                Slog.e(TAG, "onInjectionSucceeded didn't find expected entry for package "
-                        + packageName);
-                session.close();
-                return;
-            }
-            CameraInjectionSession existingSession = data.cameraIdToSession.put(cameraId, session);
-            if (existingSession != null) {
-                Slog.e(TAG, "onInjectionSucceeded found unexpected existing session for camera "
-                        + cameraId);
-                existingSession.close();
-            }
-        }
-    }
-
-    private void onInjectionError(String cameraId, String packageName, @NonNull int errorCode) {
-        if (errorCode != ERROR_INJECTION_UNSUPPORTED) {
-            // ERROR_INJECTION_UNSUPPORTED means that there wasn't an external camera to map to the
-            // internal camera, which is expected when using the injection interface as we are in
-            // this class to simply block camera access. Any other error is unexpected.
-            Slog.e(TAG, "Unexpected injection error code:" + errorCode + " for camera:" + cameraId
-                    + " and package:" + packageName);
-            return;
-        }
-        synchronized (mLock) {
-            InjectionSessionData data = mPackageToSessionData.get(packageName);
-            if (data != null) {
-                mBlockedCallback.onCameraAccessBlocked(data.appUid);
-            }
-        }
     }
 }

@@ -1019,28 +1019,7 @@ public class CameraServiceProxy extends SystemService
     }
 
     private boolean notifyUsbDeviceHotplugLocked(@NonNull UsbDevice device, boolean attached) {
-        // Only handle external USB camera devices
-        if (device.getHasVideoCapture()) {
-            // Forward the usb hotplug event to the native camera service running in the
-            // cameraserver
-            // process.
-            ICameraService cameraService = getCameraServiceRawLocked();
-            if (cameraService == null) {
-                Slog.w(TAG, "Could not notify cameraserver, camera service not available.");
-                return false;
-            }
 
-            try {
-                int eventType = attached ? ICameraService.EVENT_USB_DEVICE_ATTACHED
-                        : ICameraService.EVENT_USB_DEVICE_DETACHED;
-                mCameraServiceRaw.notifySystemEvent(eventType, new int[]{device.getDeviceId()});
-            } catch (RemoteException e) {
-                Slog.w(TAG, "Could not notify cameraserver, remote exception: " + e);
-                // Not much we can do if camera service is dead.
-                return false;
-            }
-            return true;
-        }
         return false;
     }
 
