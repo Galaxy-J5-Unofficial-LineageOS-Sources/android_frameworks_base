@@ -733,6 +733,18 @@ public final class CachedAppOptimizer {
     }
 
     /**
+     * Enable or disable the freezer. When enable == false all frozen processes are unfrozen,
+     * but aren't removed from the freezer. While in this state, processes can be added or removed
+     * by using Process.setProcessFrozen(), but they wouldn't be actually frozen until the freezer
+     * is enabled. If enable == true all processes in the freezer are frozen.
+     *
+     * @param enable Specify whether to enable (true) or disable (false) the freezer.
+     *
+     * @hide
+     */
+    private static native void enableFreezerInternal(boolean enable);
+
+    /**
      * Informs binder that a process is about to be frozen. If freezer is enabled on a process via
      * this method, this method will synchronously dispatch all pending transactions to the
      * specified pid. This method will not add significant latencies when unfreezing.
@@ -758,12 +770,6 @@ public final class CachedAppOptimizer {
     private static native int getBinderFreezeInfo(int pid);
 
     /**
-     * Returns the path to be checked to verify whether the freezer is supported by this system.
-     * @return absolute path to the file
-     */
-    private static native String getFreezerCheckPath();
-
-    /**
      * Determines whether the freezer is supported by this system
      */
     public static boolean isFreezerSupported() {
@@ -771,10 +777,10 @@ public final class CachedAppOptimizer {
         FileReader fr = null;
 
         try {
-            fr = new FileReader(getFreezerCheckPath());
-            char state = (char) fr.read();
+            fr = new FileReader("/dev/freezer/frozen/freezer.killable");
+            int i = fr.read();
 
-            if (state == '1' || state == '0') {
+            if ((char) i == '1') {
                 // Also check freezer binder ioctl
                 getBinderFreezeInfo(Process.myPid());
                 supported = true;

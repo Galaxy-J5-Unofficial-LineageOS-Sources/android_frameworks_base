@@ -217,6 +217,7 @@ public class CameraServiceProxy extends SystemService
     private static final IBinder nfcInterfaceToken = new Binder();
 
     private final boolean mNotifyNfc;
+    private final boolean mAllowMediaUid;
 
     private ScheduledThreadPoolExecutor mLogWriterService = new ScheduledThreadPoolExecutor(
             /*corePoolSize*/ 1);
@@ -553,7 +554,8 @@ public class CameraServiceProxy extends SystemService
 
         @Override
         public void pingForUserUpdate() {
-            if (Binder.getCallingUid() != Process.CAMERASERVER_UID) {
+            if (Binder.getCallingUid() != Process.CAMERASERVER_UID
+                    && (!mAllowMediaUid || Binder.getCallingUid() != Process.MEDIA_UID)) {
                 Slog.e(TAG, "Calling UID: " + Binder.getCallingUid() + " doesn't match expected " +
                         " camera service UID!");
                 return;
@@ -564,7 +566,8 @@ public class CameraServiceProxy extends SystemService
 
         @Override
         public void notifyCameraState(CameraSessionStats cameraState) {
-            if (Binder.getCallingUid() != Process.CAMERASERVER_UID) {
+            if (Binder.getCallingUid() != Process.CAMERASERVER_UID
+                    && (!mAllowMediaUid || Binder.getCallingUid() != Process.MEDIA_UID)) {
                 Slog.e(TAG, "Calling UID: " + Binder.getCallingUid() + " doesn't match expected " +
                         " camera service UID!");
                 return;
@@ -608,6 +611,8 @@ public class CameraServiceProxy extends SystemService
 
         mNotifyNfc = SystemProperties.getInt(NFC_NOTIFICATION_PROP, 0) > 0;
         if (DEBUG) Slog.v(TAG, "Notify NFC behavior is " + (mNotifyNfc ? "active" : "disabled"));
+        mAllowMediaUid = mContext.getResources().getBoolean(
+                com.android.internal.R.bool.config_allowMediaUidForCameraServiceProxy);
         // Don't keep any extra logging threads if not needed
         mLogWriterService.setKeepAliveTime(1, TimeUnit.SECONDS);
         mLogWriterService.allowCoreThreadTimeOut(true);
@@ -1019,28 +1024,7 @@ public class CameraServiceProxy extends SystemService
     }
 
     private boolean notifyUsbDeviceHotplugLocked(@NonNull UsbDevice device, boolean attached) {
-        // Only handle external USB camera devices
-        if (device.getHasVideoCapture()) {
-            // Forward the usb hotplug event to the native camera service running in the
-            // cameraserver
-            // process.
-            ICameraService cameraService = getCameraServiceRawLocked();
-            if (cameraService == null) {
-                Slog.w(TAG, "Could not notify cameraserver, camera service not available.");
-                return false;
-            }
 
-            try {
-                int eventType = attached ? ICameraService.EVENT_USB_DEVICE_ATTACHED
-                        : ICameraService.EVENT_USB_DEVICE_DETACHED;
-                mCameraServiceRaw.notifySystemEvent(eventType, new int[]{device.getDeviceId()});
-            } catch (RemoteException e) {
-                Slog.w(TAG, "Could not notify cameraserver, remote exception: " + e);
-                // Not much we can do if camera service is dead.
-                return false;
-            }
-            return true;
-        }
         return false;
     }
 
